@@ -80,20 +80,19 @@ client.once(Events.ClientReady, () => {
       }
     })
     .then((response) => response.text())
-    .then((result) => fightsProcessor(result))
+    .then(fightsProcessor)
     .catch((error) => console.log("error", error));
 });
 
 client.on("messageCreate", (message) => {
-  // console.log(message);
-  // console.log(message.embeds);
-  // console.log(message.embeds[0].data);
+  console.log(message);
+  console.log(message.embeds[0]);
 
   const embedUrl = String(message.embeds[0]?.data?.url);
-  console.log({embedUrl})
-  const {reportId = ""} = embedUrl.match(
-      /www.fflogs.com\/reports\/(?<reportId>.*)\//
-    )?.groups ?? {}
+  console.log({ embedUrl });
+  const { reportId = "" } =
+    embedUrl.match(/www.fflogs.com\/reports\/(?<reportId>[^\/]+)/)?.groups ??
+    {};
   console.log({ reportId });
   if (reportId) {
     try {
@@ -103,13 +102,13 @@ client.on("messageCreate", (message) => {
     }
   }
 
-  if (message.content === "test") {
-    try {
-      message.reply("123");
-    } catch (error) {
-      console.log("Message reply error", error);
-    }
-  }
+  // if (message.content === "test") {
+  //   try {
+  //     message.reply("123");
+  //   } catch (error) {
+  //     console.log("Message reply error", error);
+  //   }
+  // }
 });
 
 client.login(process.env["DISCORD_TOKEN"]);
