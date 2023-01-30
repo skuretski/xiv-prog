@@ -1,6 +1,6 @@
 require("dotenv").config();
 
-import { Client, Events, GatewayIntentBits } from "discord.js";
+import { Client, Events, GatewayIntentBits, EmbedBuilder } from "discord.js";
 import gql from "graphql-tag";
 
 import fightsProcessor from "./processor/fightsProcessor";
@@ -102,13 +102,45 @@ client.on("messageCreate", (message) => {
     }
   }
 
-  // if (message.content === "test") {
-  //   try {
-  //     message.reply("123");
-  //   } catch (error) {
-  //     console.log("Message reply error", error);
-  //   }
-  // }
+  if (message.content === "test") {
+    const replyEmbed = new EmbedBuilder()
+      .setColor(0x0099ff)
+      .setTitle("Title")
+      .setURL("https://discord.js.org/")
+      .setAuthor({
+        name: "author",
+        // iconURL: "https://i.imgur.com/AfFp7pu.png",
+        // url: "https://discord.js.org",
+      })
+      .setDescription("Description")
+      // .setThumbnail("https://i.imgur.com/AfFp7pu.png")
+      .addFields(
+        { name: "# of Fights", value: "25" },
+        // { name: "\u200B", value: "\u200B" },
+        { name: "Total Duration", value: "2h 47m", inline: true },
+        { name: "Fight time total", value: "2h 11m (79% total)", inline: true },
+        // { name: "\u200B", value: "\u200B" },
+        { name: "Longest Fight time", value: "9m 21s", inline: true },
+        { name: "Average Fight time", value: "5m 16s (1m 56s SD)", inline: true },
+      )
+      // .addFields({
+      //   name: "field2-inl-name",
+      //   value: "field2-inl-val",
+      //   inline: true,
+      // })
+      // .setImage("https://i.imgur.com/AfFp7pu.png")
+      .setTimestamp()
+      .setFooter({
+        text: "Footer",
+        // iconURL: "https://i.imgur.com/AfFp7pu.png",
+      });
+
+    try {
+      message.reply({ embeds: [replyEmbed] });
+    } catch (error) {
+      console.log("Message reply error", error);
+    }
+  }
 });
 
 client.login(process.env["DISCORD_TOKEN"]);

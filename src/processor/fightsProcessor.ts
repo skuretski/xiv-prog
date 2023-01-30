@@ -1,8 +1,9 @@
-
 import { mkdir, writeFile } from "node:fs/promises";
 import dayjs from "dayjs";
 import duration from "dayjs/plugin/duration";
 import relativeTime from "dayjs/plugin/relativeTime";
+import timeMetrics from "./timeMetrics";
+
 dayjs.extend(duration);
 dayjs.extend(relativeTime);
 
@@ -35,14 +36,16 @@ export default async (response: string) => {
   const uwuFights = fightsByEncounterId.get(UWU_ENCOUNTER_ID) ?? [];
 
   const timeMets = timeMetrics(uwuFights);
-  console.log({ timeMets });
+  if (timeMets) {
+    console.log(formatTimeMetrics(timeMets));
+  }
 
-  console.log(uwuFights.length);
-  console.log(
-    uwuFights
-      .filter((f) => f.fightPercentage != null)
-      .map((f) => f.fightPercentage)
-  );
+  // console.log(uwuFights.length);
+  // console.log(
+  //   uwuFights
+  //     .filter((f) => f.fightPercentage != null)
+  //     .map((f) => f.fightPercentage)
+  // );
   let { percentages, phases } = uwuFights.reduce(
     ({ percentages, phases }, { fightPercentage, lastPhase }) => {
       const hasPercentage = fightPercentage != null;
@@ -80,43 +83,32 @@ export default async (response: string) => {
   return response;
 };
 
-const sum = (a: number, b: number) => a + b;
-const max2 = (a: number, b: number) => Math.max(a, b);
-const sumSqrDiff = (mean: number,tr:(_:number)=>number) => (a: number, b: number) => {
-  return a + (tr(b) - tr(mean)) * (tr(b) - tr(mean));
-};
-
-const timeMetrics = (fights: Fight[]) => {
-  if (!fights.length) return null; //?
-
-  const sortedFights = [...fights].sort((f1, f2) => f1.id - f2.id);
-  const firstStart = sortedFights[0].startTime;
-  const lastEnd = sortedFights[sortedFights.length - 1].endTime;
-
-  const totalTimeDiff = lastEnd - firstStart;
-  const fightDurations = sortedFights.map((f) => f.endTime - f.startTime);
-  const totalTimeInFights = fightDurations.reduce(sum, 0);
-  const percentageInFights = (totalTimeInFights * 100) / totalTimeDiff;
-  const longestFight = fightDurations.reduce(max2, -Infinity);
-
-  const avgFightTime = totalTimeInFights / fights.length;
-  const sdFightTime =
-    1000 *
-    Math.sqrt(
-      fightDurations.reduce(sumSqrDiff(avgFightTime,(x:number)=>x/1000), 0) / fights.length
-    );
-
-  return {
-    totalReportDuration: dayjs.duration(totalTimeDiff).format("H[h] mm[m]"),
-    totalFights: fights.length,
-    totalFightTime: `${dayjs
-      .duration(totalTimeInFights)
-      .format("H[h] mm[m]")} (${percentageInFights.toFixed(0)}% of total)`,
-    longestFight: dayjs.duration(longestFight).format("m[m] ss[s]"),
-    averageFightTime: `${dayjs
-      .duration(avgFightTime)
-      .format("m[m] ss[s]")} (${dayjs
-      .duration(sdFightTime)
-      .format("m[m] ss[s]")} SD)`,
-  };
-};
+const formatTimeMetrics = ({
+  numberOfFights,
+  totalReportDuration,
+  totalFightTime,
+  percentOfTimeInFights,
+  longestFight,
+  averageFightTime,
+  fightTimeStdDev,
+}:{
+  numberOfFights:number,
+  totalReportDuration:number,
+  totalFightTime:number,
+  percentOfTimeInFights:number,
+  longestFight:number,
+  averageFightTime:number,
+  fightTimeStdDev:number,
+}) => ({
+  numberOfFights,
+  totalReportDuration: dayjs.duration(totalReportDuration).format("H[h] mm[m]"),
+  totalFightTimeAndPercentage: `${dayjs
+    .duration(totalFightTime)
+    .format("H[h] mm[m]")} (${percentOfTimeInFights.toFixed(0)}% of total)`,
+  longestFight: dayjs.duration(longestFight).format("m[m] ss[s]"),
+  averageFightTimeAndSd: `${dayjs
+    .duration(averageFightTime)
+    .format("m[m] ss[s]")} (${dayjs
+    .duration(fightTimeStdDev)
+    .format("m[m] ss[s]")} SD)`,
+});
