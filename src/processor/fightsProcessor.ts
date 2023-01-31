@@ -1,22 +1,71 @@
 import { mkdir, writeFile } from "node:fs/promises";
+
 import dayjs from "dayjs";
 import duration from "dayjs/plugin/duration";
 import relativeTime from "dayjs/plugin/relativeTime";
-import timeMetrics from "./timeMetrics";
-
 dayjs.extend(duration);
 dayjs.extend(relativeTime);
 
+import timeMetrics from "./timeMetrics";
+
 type Fight = {
-  id: number;
+  // id: number;
   encounterID: number;
   fightPercentage: number | null | undefined;
+  bossPercentage: number | null | undefined;
   lastPhase: number | null | undefined;
   startTime: number;
   endTime: number;
 };
 
 const UWU_ENCOUNTER_ID = 1061;
+const bossByLastPhase = new Map([
+  [1, "Garuda"],
+  [2, "Ifrit"],
+  [3, "Titan"],
+  [4, "¿Lahabrea[D]?"], // haven't seen a lastPhase=4, only skips from 3 to 5
+  [5, "Ultima Weapon"],
+]);
+
+const estimateBossAndPercentage = (fightPercentage: number) => {
+  // estimateBossPercentage functions are based on figuring linear regressions of fflogs results,
+  // and could change at any time.
+  // It's possible to try to figure these regressions on fights while being processed,
+  // so long as there at least two data points per phase in the set of fights (assuming linear).
+  // Some data are more 'fixed' like fightPercentage 100 => phase = 1, boss %age = 100
+  // fightPercentage 0 => phase = {LAST}, boss %age = 0, if last phase # is known
+
+  const { estimateLastPhase = NaN, estimateBossPercentage = () => NaN } =
+    [
+      {
+        estimateLastPhase: 1,
+        minFightPercentage: 83.999,
+        estimateBossPercentage: (fP: number) => (fP - 84) * 6.25,
+      },
+      {
+        estimateLastPhase: 2,
+        minFightPercentage: 67.999,
+        estimateBossPercentage: (fP: number) => (fP - 68) * 6.25,
+      },
+      {
+        estimateLastPhase: 3,
+        minFightPercentage: 51.999,
+        estimateBossPercentage: (fP: number) => (fP - 52) * 6.25,
+      },
+      {
+        estimateLastPhase: 5,
+        minFightPercentage: -0.001,
+        estimateBossPercentage: (fP: number) => fP * 2,
+      },
+    ].find(({ minFightPercentage }) => fightPercentage > minFightPercentage) ??
+    {};
+
+  return {
+    boss: bossByLastPhase.get(estimateLastPhase),
+    bossPercentage: estimateBossPercentage(fightPercentage),
+  };
+};
+
 export default async (response: string) => {
   // const dir = `./${new Date().toISOString()}` //! for 'prod'
   const dir = "./dev";
@@ -26,59 +75,62 @@ export default async (response: string) => {
   const fights: Fight[] =
     JSON.parse(response).data?.reportData?.report?.fights ?? [];
   // console.log({fights});
-  // some fight reports have no data, where many fields are null,
-  // and another typical symptom seems to be encounterID is 0
+
   const fightsByEncounterId = fights.reduce(
     (map, f) =>
       map.get(f.encounterID)?.push(f) ? map : map.set(f.encounterID, [f]),
     new Map<number, Fight[]>()
   );
+
   const uwuFights = fightsByEncounterId.get(UWU_ENCOUNTER_ID) ?? [];
 
   const timeMets = timeMetrics(uwuFights);
-  if (timeMets) {
-    console.log(formatTimeMetrics(timeMets));
-  }
+  console.log(formatTimeMetrics(timeMets));
 
-  // console.log(uwuFights.length);
-  // console.log(
-  //   uwuFights
-  //     .filter((f) => f.fightPercentage != null)
-  //     .map((f) => f.fightPercentage)
-  // );
-  let { percentages, phases } = uwuFights.reduce(
-    ({ percentages, phases }, { fightPercentage, lastPhase }) => {
+  const percentages = uwuFights.reduce(
+    (percentages, { fightPercentage }) => {
       const hasPercentage = fightPercentage != null;
-      const percentage = 100 - (fightPercentage || NaN);
-      const hasPhase = lastPhase != null;
 
       return {
-        percentages: {
-          sum: percentages.sum + (hasPercentage ? percentage : 0),
-          size: percentages.size + (hasPercentage ? 1 : 0),
-          best: Math.max(
-            percentages.best,
-            hasPercentage ? percentage : -Infinity
-          ),
-          average: percentages.average,
-        },
-
-        phases: {
-          sum: phases.sum + (hasPhase ? lastPhase : 0),
-          size: phases.size + (hasPhase ? 1 : 0),
-          best: Math.max(phases.best, hasPhase ? lastPhase : -Infinity),
-          average: phases.average,
-        },
+        sum: percentages.sum + (hasPercentage ? fightPercentage : 0),
+        size: percentages.size + (hasPercentage ? 1 : 0),
+        best: Math.max(
+          percentages.best,
+          hasPercentage ? fightPercentage : -Infinity
+        ),
+        // average: percentages.average,
       };
     },
     {
-      percentages: { sum: 0, size: 0, best: -Infinity, average: NaN },
-      phases: { sum: 0, size: 0, best: -Infinity, average: NaN },
+      sum: 0,
+      size: 0,
+      best: -Infinity,
+      // average: NaN,
     }
   );
-  percentages.average = percentages.sum / (percentages.size || NaN);
-  phases.average = phases.sum / (phases.size || NaN);
-  console.log({ percentages, phases });
+  const averageFightPercentage = percentages.sum / (percentages.size || NaN);
+  // console.log({ percentages, phases });
+  console.log(
+    {
+      averageFightPercentage,
+      effectively: estimateBossAndPercentage(averageFightPercentage)
+    },
+  );
+
+  const sortedFights = [...uwuFights]
+    .sort(
+      (a, b) =>
+        (a.fightPercentage ?? Infinity) - (b.fightPercentage ?? Infinity)
+    )
+    .map(({ bossPercentage, lastPhase, fightPercentage }) => ({
+      boss:
+        bossByLastPhase.get(lastPhase ?? NaN) ?? `Boss @ P${lastPhase ?? NaN}`,
+      bossPercentage,
+      fightPercentage,
+    }));
+  const takeBestN = 3;
+  console.log(`best ${takeBestN} fight(s)`, sortedFights.slice(0,takeBestN));
+  // console.log(sortedFights);
 
   return response;
 };
@@ -88,27 +140,23 @@ const formatTimeMetrics = ({
   totalReportDuration,
   totalFightTime,
   percentOfTimeInFights,
-  longestFight,
+  longestFightTime,
   averageFightTime,
   fightTimeStdDev,
-}:{
-  numberOfFights:number,
-  totalReportDuration:number,
-  totalFightTime:number,
-  percentOfTimeInFights:number,
-  longestFight:number,
-  averageFightTime:number,
-  fightTimeStdDev:number,
+}: {
+  numberOfFights: number;
+  totalReportDuration: number;
+  totalFightTime: number;
+  percentOfTimeInFights: number;
+  longestFightTime: number;
+  averageFightTime: number;
+  fightTimeStdDev: number;
 }) => ({
   numberOfFights,
   totalReportDuration: dayjs.duration(totalReportDuration).format("H[h] mm[m]"),
-  totalFightTimeAndPercentage: `${dayjs
-    .duration(totalFightTime)
-    .format("H[h] mm[m]")} (${percentOfTimeInFights.toFixed(0)}% of total)`,
-  longestFight: dayjs.duration(longestFight).format("m[m] ss[s]"),
-  averageFightTimeAndSd: `${dayjs
-    .duration(averageFightTime)
-    .format("m[m] ss[s]")} (${dayjs
-    .duration(fightTimeStdDev)
-    .format("m[m] ss[s]")} SD)`,
+  totalFightTime: dayjs.duration(totalFightTime).format("H[h] mm[m]"),
+  fightTimePercentageOfDuration: `${percentOfTimeInFights.toFixed(0)}%`,
+  longestFightTime: dayjs.duration(longestFightTime).format("m[m] ss[s]"),
+  averageFightTimeAndSd: dayjs.duration(averageFightTime).format("m[m] ss[s]"),
+  fightTimeStdDev: dayjs.duration(fightTimeStdDev).format("m[m] ss[s]"),
 });

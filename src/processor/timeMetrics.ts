@@ -10,8 +10,17 @@ interface Fight {
 }
 
 export default (fights: Fight[]) => {
-  const numberOfFights = fights.length
-  if (!numberOfFights) return null; //?
+  const numberOfFights = fights.length;
+  if (!numberOfFights)
+    return {
+      numberOfFights,
+      totalReportDuration: 0,
+      totalFightTime: 0,
+      percentOfTimeInFights: 0,
+      longestFightTime: 0,
+      averageFightTime: 0,
+      fightTimeStdDev: 0,
+    };
 
   const sortedFights = [...fights].sort(
     (f1, f2) => f1.startTime - f2.startTime
@@ -23,7 +32,7 @@ export default (fights: Fight[]) => {
   const fightDurations = sortedFights.map((f) => f.endTime - f.startTime);
   const totalFightTime = fightDurations.reduce(sum, 0);
   const percentOfTimeInFights = (totalFightTime * 100) / totalReportDuration;
-  const longestFight = fightDurations.reduce(max2, -Infinity);
+  const longestFightTime = fightDurations.reduce(max2, -Infinity);
 
   const averageFightTime = totalFightTime / numberOfFights;
   const fightTimeStdDev =
@@ -40,7 +49,7 @@ export default (fights: Fight[]) => {
     numberOfFights,
     totalFightTime,
     percentOfTimeInFights,
-    longestFight,
+    longestFightTime,
     averageFightTime,
     fightTimeStdDev,
   };
